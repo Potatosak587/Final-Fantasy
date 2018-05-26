@@ -1,0 +1,2246 @@
+import pygame
+import sys
+import time
+import os
+import random
+import math
+
+# By Kyle Yen - Period 4
+
+# Forces static position of screen
+os.environ['SDL_VIDEO_CENTERED'] = '1'
+
+# Constant values
+pix_sz = 32
+font_sz = pix_sz * 2 / 3
+win_w = 16 * pix_sz
+win_h = 22 * pix_sz
+
+mar_1 = pix_sz * 0.5
+mar_2 = pix_sz * 1
+
+fps = 60
+
+# Colors
+WHITE = (255, 255, 255)
+LIGHT_GRAY = (192, 192, 192)
+GRAY = (128, 128, 128)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+YELLOW = (216, 216, 0)
+LIGHT_GREEN = (128, 255, 128)
+GREEN = (0, 255, 0)
+LIGHT_BLUE = (128, 128, 255)
+BLUE = (64, 64, 255)
+LIGHT_BROWN = (255, 255, 0)
+BROWN = (128, 128, 0)
+
+pygame.init()
+
+
+class Textbox:
+    def __init__(self, run, x, y, w, h, align):
+        self.run = run
+   
+        self.color = BLUE
+        self.image = pygame.Surface((w, h))
+        self.image.convert()
+        self.image.fill(self.color)
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+   
+        self.align = align
+   
+        self.text_list = []
+        # Assigns coordinates of textbox based on alignment
+        for line in range(0, 8):
+            if self.align == "left":
+                text = Text(font_sz, "", "left", x + mar_1, y + mar_1 + font_sz * line, WHITE)
+            else:
+                text = Text(font_sz, "", "center", self.rect.centerx, self.rect.y + mar_1 + font_sz * line, WHITE)
+            self.text_list += [text]
+   
+    def prompt(self, new_text_list):
+        # Produces a prompt that must be exited out of by pressing space
+        self.update(new_text_list)
+        while True:
+            for event in pygame.event.get():
+                # Allows the red button to function
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        sys.exit()
+                    # Space = return
+                    if event.key == pygame.K_SPACE:
+                        return 0
+   
+            self.textbox_blit()
+   
+    def message(self, new_text_list):
+        # Produces a message that closes after a certain amount of time
+        length = 2
+   
+        self.update(new_text_list)
+        self.textbox_blit()
+   
+        time.sleep(length)
+   
+    def update(self, new_text_list):
+        # Updates text in box
+        for line in range(0, len(new_text_list) - 1):
+            self.text_list[line].update_text(new_text_list[line])
+            if self.text_list[line].align == "center":
+                self.text_list[line].rect.centerx = self.rect.centerx
+   
+    def textbox_blit(self):
+        # Renders all images of textbox
+        self.run.screen.blit(self.image, self.rect)
+        for line in self.text_list:
+            self.run.screen.blit(line.image, line.rect)
+        # Writes to main surface
+        pygame.display.flip()
+
+
+class Text:
+    def __init__(self, size, text, align, x, y, color):
+        self.font = pygame.font.SysFont("Britannic Bold", int(size))
+        self.text = text
+        self.color = color
+        self.image = self.font.render(self.text, 1, color)
+        self.rect = self.image.get_rect()
+        self.align = align
+        if self.align == "left":
+            self.rect.x = x
+            self.rect.y = y
+        elif self.align == "center":
+            self.rect.centerx = x
+            self.rect.y = y
+   
+    def update_text(self, new_text):
+        # Updates text
+        self.text = new_text
+        self.image = self.font.render(self.text, 1, self.color)
+   
+    def update_color(self, new_color):
+        self.color = new_color
+        self.image = self.font.render(self.text, 1, self.color)
+
+
+class Pointer:
+    def __init__(self, color):
+        self.color = color
+        self.image = pygame.Surface((pix_sz * 0.25, pix_sz * 0.25)).convert()
+        self.rect = self.image.get_rect()
+   
+    def update(self, new_x, new_y):
+        # Updates position
+        self.rect.centerx = new_x
+        self.rect.centery = new_y
+
+
+class Game:
+   def __init__(self, frames):
+       self.fps = frames
+       self.screen = pygame.display.set_mode((win_w, win_h), pygame.SRCALPHA)
+       self.beginning = self.running = self.ending = True
+       self.clock = pygame.time.Clock()
+       self.clock.tick(self.fps)
+
+       self.title = Text(win_h / 9, "Final Fantasy", "center", win_w / 2, win_h * 0.4, WHITE)
+       self.subtitle = Text(win_h / 12, "--Click Here--", "center", win_w / 2, win_h * 0.6, WHITE)
+
+       self.end_title_win = Text(win_h / 6, "You Win!", "center", win_w / 2, win_h / 2 - 192, WHITE)
+       self.end_title_lose = Text(win_h / 6, "You Lost", "center", win_w / 2, win_h / 2 - 192, WHITE)
+       self.end_subtitle = Text(win_h / 12, "--Click to Close--", "center", win_w / 2, win_h / 2 + 64, WHITE)
+
+       self.textbox_prompt = Textbox(self, 0, 0, win_w, pix_sz * 4, "center")
+
+       self.textbox_top = Textbox(self, 0, 0, win_w, pix_sz * 4, "left")
+       self.textbox_middle = Textbox(self, 0, pix_sz * 4, win_w, pix_sz * 13, "left")
+
+       textbox_0 = Textbox(self, win_w * 0, win_h - pix_sz * 6, win_w * 0.16, pix_sz * 6, "left")
+       textbox_1 = Textbox(self, win_w * 0.16, win_h - pix_sz * 6, win_w * 0.24, pix_sz * 6, "left")
+       textbox_2 = Textbox(self, win_w * 0.40, win_h - pix_sz * 6, win_w * 0.24, pix_sz * 6, "left")
+       self.textbox_health = Textbox(self, win_w * 0.64, win_h - pix_sz * 6, win_w * 0.36, pix_sz * 6, "left")
+
+       self.textbox_combat_list = [textbox_0, textbox_1, textbox_2, self.textbox_health]
+       self.textbox_menu_list = [textbox_0, textbox_1, textbox_2, self.textbox_health,
+                                 self.textbox_prompt, self.textbox_middle]
+
+       self.pointer = Pointer(WHITE)
+       self.pointer_2 = Pointer(WHITE)
+
+   def create_plat(self, x, y, name, location):
+       p = Platform(x, y, name, location)
+
+       # Platforms for town
+       if location == "town":
+           if name == (" " or "T" or "D" or "P" or "W"):
+               p = Platform(x, y, name, location)
+           # Loot
+           elif name == "L":
+               print("Loot: " + str(x / pix_sz) + " " + str(y / pix_sz))
+
+       # Platforms for world
+       elif location == "world":
+           if name == (" " or "G" or "F" or "R" or "D" or "P"):
+               p = Platform(x, y, name, location)
+           # Town
+           elif name == "T":
+               print("Town: " + str(x / pix_sz) + " " + str(y / pix_sz))
+           # Castle
+           elif name == "C":
+               print("Castle: " + str(x / pix_sz) + " " + str(y / pix_sz))
+           # Loot
+           elif name == "L":
+               print("Loot: " + str(x / pix_sz) + " " + str(y / pix_sz))
+
+       # Platforms for castle
+       elif location == "castle":
+           if name == " " or "W":
+               p = Platform(x, y, name, location)
+           # Loot
+           elif name == "L":
+               print("Loot: " + str(x / pix_sz) + " " + str(y / pix_sz))
+           # Exit
+           elif name == "E":
+               print("Exit: " + str(x / pix_sz) + " " + str(y / pix_sz))
+
+       return p
+
+   def text_blit(self, obj_list):
+       # Renders each obj given, if they have a surface and rect
+       for obj in obj_list:
+           if len(obj) > 1:
+               # If an argument is given, make the object blink
+               if obj[1] == 1:
+                   if (pygame.time.get_ticks() % 1000) < 500:
+                       self.screen.blit(obj[0].image, obj[0].rect)
+           else:
+               self.screen.blit(obj[0].image, obj[0].rect)
+
+   def determ_enemies(self, player, enemy, enemy_list, plat_group_w, encounter_type):
+       # Depending on the location of the player, enemies are assigned to enemy_list
+       if player.location == "world":
+           p = pygame.sprite.spritecollide(player, plat_group_w, False)
+           number = random.randrange(1, 6)
+           print("Random number: " + str(number))
+
+           # Grass enemies
+           if p[0].variant == "grass" or p[0].variant == "path":
+               if number == 1:
+                   enemy_list = [GoblinEnemy(enemy, 1),
+                                 GoblinEnemy(enemy, 2),
+                                 GoblinEnemy(enemy, 3)]
+               elif number == 2:
+                   enemy_list = [WolfEnemy(enemy, 1),
+                                 WolfEnemy(enemy, 2),
+                                 WolfEnemy(enemy, 3)]
+               elif number == 3:
+                   enemy_list = [GoblinEnemy(enemy, 1),
+                                 GoblinEnemy(enemy, 2),
+                                 GoblinEnemy(enemy, 3)]
+               elif number == 4:
+                   enemy_list = [GoblinEnemy(enemy, 1),
+                                 OgreEnemy(enemy, 2),
+                                 GoblinEnemy(enemy, 3)]
+               elif number == 5:
+                   enemy_list = [GoblinEnemy(enemy, 1),
+                                 GoblinEnemy(enemy, 2),
+                                 GoblinEnemy(enemy, 3)]
+           elif p[0].variant == "forest":
+                   if number == 1:
+                       enemy_list = [GoblinEnemy(enemy, 1),
+                                     GoblinEnemy(enemy, 2),
+                                     GoblinEnemy(enemy, 3)]
+                   elif number == 2:
+                       enemy_list = [WolfEnemy(enemy, 1),
+                                     WolfEnemy(enemy, 2),
+                                     WolfEnemy(enemy, 3)]
+                   elif number == 3:
+                       enemy_list = [WolfEnemy(enemy, 1),
+                                     WolfEnemy(enemy, 2),
+                                     GoblinEnemy(enemy, 3)]
+                   elif number == 4:
+                       enemy_list = [GoblinEnemy(enemy, 1),
+                                     OgreEnemy(enemy, 2),
+                                     GoblinEnemy(enemy, 3)]
+                   elif number == 5:
+                       enemy_list = [GoblinEnemy(enemy, 1),
+                                     GoblinEnemy(enemy, 2),
+                                     GoblinEnemy(enemy, 3)]
+           elif p[0].variant == "dirt":
+                   if number == 1:
+                       enemy_list = [
+                           GhoulEnemy(enemy, 1),
+                           GhoulEnemy(enemy, 2),
+                           GhoulEnemy(enemy, 3)]
+                   elif number == 2:
+                       enemy_list = [SkeletonEnemy(enemy, 1),
+                                     SkeletonEnemy(enemy, 2),
+                                     SkeletonEnemy(enemy, 3)]
+                   elif number == 3:
+                       enemy_list = [OgreEnemy(enemy, 1),
+                                     OgreEnemy(enemy, 2),
+                                     GoblinEnemy(enemy, 3)]
+                   elif number == 4:
+                       enemy_list = [WolfEnemy(enemy, 1),
+                                     WolfEnemy(enemy, 2),
+                                     WolfEnemy(enemy, 3)]
+                   elif number == 5:
+                       enemy_list = [GoblinEnemy(enemy, 1),
+                                     GoblinEnemy(enemy, 2),
+                                     GoblinEnemy(enemy, 3)]
+
+       elif player.location == "castle":
+                   # If in final-boss room, loads encounter for final boss
+                   if encounter_type == "boss":
+                       enemy_list = [
+                           GoblinEnemy(enemy, 1),
+                           BossEnemy(enemy, 2),
+                           GoblinEnemy(enemy, 3)]
+                   # If chest is opened, force encounter
+                   elif encounter_type == "forced":
+                       enemy_list = [
+                           SkeletonEnemy(enemy, 1),
+                           SkeletonEnemy(enemy, 2),
+                           SkeletonEnemy(enemy, 3)]
+                   else:
+                       number = random.randrange(1, 4)
+                       print("Random number: " + str(number))
+
+                       if number == 1:
+                           enemy_list = [
+                               GhoulEnemy(enemy, 1),
+                               GhoulEnemy(enemy, 2),
+                               GhoulEnemy(enemy, 3)]
+                       elif number == 2:
+                           enemy_list = [
+                               SkeletonEnemy(enemy, 1),
+                               SkeletonEnemy(enemy, 2),
+                               SkeletonEnemy(enemy, 3)]
+                       elif number == 3:
+                           enemy_list = [
+                               GargoyleEnemy(enemy, 1),
+                               GargoyleEnemy(enemy, 2),
+                               GargoyleEnemy(enemy, 3)]
+
+       return enemy_list
+
+   def combat_loop(self, player, hero_list, enemy, old_enemy_list, plat_group_w, encounter_type):
+       # Runs a loop of combat where player selects actions, and combat continues until one side falls
+
+       # Selections are Attack, Defend, Spells, Items, and Run
+       enemy_list = self.determ_enemies(player, enemy, old_enemy_list, plat_group_w, encounter_type)
+       print("Enemies: " + enemy_list[0].name + enemy_list[1].name + enemy_list[2].name)
+
+       result = False
+       encounter = True
+       while encounter:
+           # For all entities that are not downed, allows turn to be taken
+           active_entities = []
+           for c in hero_list:
+               c.hero.check_health(c, hero_list)
+               if not c.downed:
+                   # If character is not downed, allows selection of character's actions
+                   print("Selection: " + str(c.name))
+                   active_entities += [c]
+
+                   hero_name_list = []
+                   for ch in hero_list:
+                       hero_name_list += [ch.name]
+
+                   enemy_obj_list = []
+                   enemy_name_list = []
+                   for e in enemy_list:
+                       if not e.downed:
+                           enemy_obj_list += [e]
+                           enemy_name_list += [e.name]
+
+                   spell_obj_list = []
+                   spell_name_list = []
+                   for s in c.spell_list:
+                       if s == "None":
+                           spell_obj_list += ["None"]
+                           spell_name_list += ["None"]
+                       else:
+                           if s.targets == "ally":
+                               spell_obj_list += [[s, hero_list]]
+                               spell_name_list += [[s.name, hero_name_list]]
+                           elif s.targets == "enemy":
+                               spell_obj_list += [[s, enemy_list]]
+                               spell_name_list += [[s.name, enemy_name_list]]
+
+                   item_obj_list = []
+                   for i in player.item_list:
+                       item_obj_list += [[i, hero_name_list]]
+
+                   g_obj = [c.name, [["Attack", enemy_obj_list],
+                                        ["Defend"],
+                                        ["Spells", spell_obj_list],
+                                        ["Items", item_obj_list],
+                                        ["Run"]]]
+                   g_name = [c.name, [["Attack", enemy_name_list],
+                                         ["Defend"],
+                                         ["Spells", spell_name_list],
+                                         ["Items", [["H. Pot.       " + str(player.item_inven[0]), hero_name_list],
+                                                    ["P. Down  " + str(player.item_inven[1]), hero_name_list],
+                                                    ["E. Pot. " + str(player.item_inven[2]), hero_name_list]]],
+                                         ["Run"]]]
+
+                   output = self.selection(player, hero_list, enemy_list, "combat", g_obj, g_name, c, 0, [0, 0, 0, 0])
+                   c.update_selection(output)
+
+                   if output[0][0] == 1:
+                       c.defend_bonus = 75
+                       c.defend_dura = 1
+               else:
+                   print(c.name + " is downed.")
+           for e in enemy_list:
+               if not e.downed:
+                   active_entities += [e]
+
+           turn_order = random.sample(active_entities, len(active_entities))
+           for entity in turn_order:
+               empty_text_list = ["", "", "", "", "", "", "", ""]
+               for box in range(0, 3):
+                   self.textbox_combat_list[box].update(empty_text_list)
+
+               # Characters and enemies take their turn in a random order
+               if isinstance(entity, CharacterHero):
+                   entity.shift(pix_sz * (-2), hero_list, enemy_list)
+                   response = entity.hero.attack(player, entity, hero_list, enemy_list)
+                   entity.shift(pix_sz * 2, hero_list, enemy_list)
+                   if response == "run success":
+                       for c in hero_list:
+                           c.shift(pix_sz * 8)
+                       self.textbox_prompt.prompt(["The party successfully ran away.", "", "", "", "", "", "", ""])
+                       return "Ran away"
+               else:
+                   entity.enemy.shift(pix_sz * 2, hero_list, enemy_list, entity)
+                   entity.enemy.attack(entity, hero_list)
+                   entity.enemy.shift(pix_sz * (-2), hero_list, enemy_list, entity)
+               result = self.determ_encounter_end(hero_list, enemy_list)
+               if result != "false":
+                   encounter = False
+                   break
+
+           for c in hero_list:
+               c.hero.check_buffs(c)
+
+       # Checks if result of encounter is a win or loss, gives rewards if a win
+       if result == "win":
+           print("Encounter has been won")
+           self.combat_rewards(hero_list, enemy_list, player)
+           return "win"
+       else:
+           print("Encounter has been lost")
+           print("Game Over")
+           return "lose"
+
+   def determ_encounter_end(self, hero_list, enemy_list):
+       # Determines if encounter is over, and returns which side wins
+       # If all characters are downed, return "lose"
+       if hero_list[0].downed and hero_list[1].downed and hero_list[2].downed and hero_list[3].downed:
+           return "lose"
+       # If all enemies are downed, return "win"
+       elif enemy_list[0].downed and enemy_list[1].downed and enemy_list[2].downed:
+           return "win"
+       # If encounter is not over, return false
+       else:
+           return "false"
+
+   def combat_rewards(self, hero_list, enemy_list, player):
+       # Handles exp and gil gained, also handles character level-ups
+       print("Distributing combat rewards.")
+
+       gained_gil = 0
+       gained_exp = 0
+       for e in enemy_list:
+           gained_gil += random.randrange(int(e.gil_drop * 0.7), int(e.gil_drop * 1.3))
+           gained_exp += random.randrange(int(e.exp_drop * 0.7), int(e.exp_drop * 1.3))
+       print("Obtained " + str(gained_gil) + " gil.")
+       player.gil += gained_gil
+       print("Gil: " + str(player.gil))
+       self.textbox_prompt.prompt(["Obtained " + str(gained_gil) + " gil.", "", "", "", "", "", "", ""])
+       self.textbox_prompt.prompt(["Obtained " + str(gained_exp) + " exp.", "", "", "", "", "", "", ""])
+
+       # Adds exp to all characters that are not downed
+       for c in hero_list:
+           if not c.downed:
+               c.exp += gained_exp
+           print(c.name + " exp: " + str(c.exp))
+
+           # If character's exp exceeds or meets required amount, character levels up
+           if c.exp >= c.exp_needed:
+               c.level += 1
+               print(c.name + " is now level " + str(c.level) + "!")
+               self.textbox_prompt.prompt([c.name + " is now level " + str(c.level) + "!", "", "", "", "", "", "", ""])
+               c.multiplier = c.multiplier * 1.1
+               c.exp -= c.exp_needed
+               c.exp_needed += 50
+               c.hero.update_stats(c)
+
+       # Updates equip and/or items if they are dropped
+
+       # Randomly distributes equipment
+       chance = random.random() * 100
+       if 0 <= chance < 10:
+           drop = random.sample(player.equip_list, 1)[0]
+           print("Obtained " + drop.name + ".")
+           self.textbox_prompt.prompt(["Obtained " + drop.name + ".", "", "", "", "", "", "", ""])
+           player.equip_inventory += drop
+       elif 10 <= chance <= 30:
+           drop = random.sample(player.item_list, 1)[0]
+           print("Obtained " + drop.name)
+           self.textbox_prompt.prompt(["Obtained " + drop.name + ".", "", "", "", "", "", "", ""])
+           if drop.name == "Potion":
+               player.item_inven[0] += 1
+           if drop.name == "Phoenix Down":
+               player.item_inven[1] += 1
+           if drop.name == "Energy Potion":
+               player.item_inven[2] += 1
+
+       print("Exiting combat.")
+
+   def menu_loop(self, player, hero_list):
+       # Pause Menu, out of combat
+       # Selections are Stats, Equipment, Spells, Items, and Tips
+       print("Selection: Pause Menu")
+
+       hero_name_list = []
+       spell_obj_list = []
+       spell_name_list = []
+       for c in hero_list:
+           hero_name_list += [c.name]
+           for spell in c.spell_list:
+               if spell.out_of_combat:
+                   spell_obj_list += [[spell, hero_list]]
+                   spell_name_list += [[spell.name, hero_name_list]]
+
+       equip_obj_list = []
+       equip_name_list = []
+       for eq in player.equip_list:
+           equip_obj_list += [eq]
+           equip_name_list += [eq.name]
+
+       item_obj_list = []
+       for i in player.item_list:
+           item_obj_list += [[i, hero_name_list]]
+
+       g_obj = ["Select Action:", [["Stats", hero_list],
+                                   ["Equip", equip_obj_list],
+                                   ["Spells", spell_obj_list],
+                                   ["Items", item_obj_list],
+                                   ["Tips"]]]
+       g_name = ["Select Action:", [["Stats", hero_name_list],
+                                    ["Equip", equip_name_list],
+                                    ["Spells", spell_name_list],
+                                    ["Items", ["Potion        " + str(player.item_inven[0]),
+                                               "Phoenix Down  " + str(player.item_inven[1]),
+                                               "Energy Potion " + str(player.item_inven[2])]],
+                                    ["Tips"]]]
+
+       # Player remains in menu until pressing "b"
+       while True:
+           turn_output = self.selection(player, hero_list, None, "pause", g_obj, g_name, None, 0, [0, 0, 0, 0])
+           if turn_output == "false":
+               return 0
+           else:
+               pos_list = turn_output[0]
+
+   def selection(self, player, hero_list, enemy_list, variant, g_obj, g_name, source, iteration, pos_list):
+       # Command for navigating menu
+       pos = 0
+
+       new_text_list = []
+
+       for line in range(0, 8):
+           if line == 0:
+               new_text_list += [g_name[0] + ":"]
+           elif len(g_name[1]) >= line:
+               if isinstance(g_name[1][line - 1], list):
+                   new_text_list += [g_name[1][line - 1][0]]
+               else: # isinstance(g_name[1][line - 1], basestring):
+                   new_text_list += [g_name[1][line - 1]]
+           else:
+               new_text_list += [""]
+       print(new_text_list)
+
+       empty_text_list = ["", "", "", "", "", "", "", ""]
+
+       # Sets initial text and cursor positions
+       self.textbox_combat_list[iteration].update(new_text_list)
+       for box in range(iteration + 1, 3):
+           self.textbox_combat_list[box].update(empty_text_list)
+       self.pointer.update(self.textbox_combat_list[iteration].text_list[pos + 1].rect.x - pix_sz * .5,
+                           self.textbox_combat_list[iteration].text_list[pos + 1].rect.centery)
+
+       # Initial render
+       self.screen.fill(WHITE)
+       if variant == "combat":
+           for textbox in self.textbox_combat_list:
+               textbox.textbox_blit()
+           for c in hero_list:
+               self.screen.blit(c.image, c.rect)
+           for e in enemy_list:
+               if not e.downed:
+                    self.screen.blit(e.image, e.rect)
+       # Blits all textboxes to fill screen with menu
+       else:
+           for textbox in self.textbox_menu_list:
+               textbox.textbox_blit()
+       self.screen.blit(self.pointer.image, self.pointer.rect)
+
+       # Writes to main surface
+       pygame.display.flip()
+
+       # Grid is a list of lists, denoting positions on the UI
+       # Checks inputs, updates UI based on responses
+       print(g_name[0])
+       print(g_name[1][pos][0])
+       while True:
+           for event in pygame.event.get():
+               # Allows the red button to function
+               if event.type == pygame.QUIT:
+                   pygame.quit()
+                   sys.exit()
+               elif event.type == pygame.KEYDOWN:
+                   if event.key == pygame.K_ESCAPE:
+                       sys.exit()
+                   if event.key == pygame.K_w:
+                       pos -= 1
+                       if pos < 0:
+                           pos = len(g_obj[1]) - 1
+                       print(g_name[1][pos][0])
+                       self.pointer.update(self.textbox_combat_list[iteration].text_list[pos + 1].rect.x - pix_sz * .5,
+                                           self.textbox_combat_list[iteration].text_list[pos + 1].rect.centery)
+                   if event.key == pygame.K_s:
+                       pos += 1
+                       if pos > len(g_obj[1]) - 1:
+                           pos = 0
+                       print(g_name[1][pos][0])
+                       self.pointer.update(self.textbox_combat_list[iteration].text_list[pos + 1].rect.x - pix_sz * .5,
+                                           self.textbox_combat_list[iteration].text_list[pos + 1].rect.centery)
+
+                   if event.key == pygame.K_b:
+                       if iteration > 0 or variant != "combat":
+                           return "false"
+                       else:
+                           print("Cannot go back")
+
+                   # Space = select, returns action and target
+                   if event.key == pygame.K_SPACE:
+                       # If list is detected, further goes to select targets
+                       if len(g_name[1][pos]) > 1 and type(g_name[1][pos]) is list:
+                           if type(g_obj[1][pos][0]) is Spell and source.spell_list[pos].cost > source.energy:
+                               print("Not enough mana.")
+                           elif type(g_obj[1][pos][0]) is Item and player.item_inven[pos] <= 0:
+                               print("None available.")
+                           else:
+                               output = self.selection(player, hero_list, enemy_list, variant, g_obj[1][pos],
+                                                       g_name[1][pos], source, iteration + 1, pos_list)
+                               if output != "false":
+                                   new_pos_list = output[0]
+                                   new_pos_list[iteration] = pos
+                                   return new_pos_list, g_obj, g_name
+                               else:
+                                   empty_text_list = ["", "", "", "", "", "", "", ""]
+
+                                   # Sets initial text and cursor positions
+                                   self.textbox_combat_list[iteration].update(new_text_list)
+                                   for box in range(iteration + 1, 3):
+                                       self.textbox_combat_list[box].update(empty_text_list)
+                                   self.pointer.update(
+                                       self.textbox_combat_list[iteration].text_list[pos + 1].rect.x - pix_sz * .5,
+                                       self.textbox_combat_list[iteration].text_list[pos + 1].rect.centery)
+                       # Unselectable option
+                       elif g_name[1][pos] == "None":
+                           print("Option cannot be selected.")
+                       # If no other options, returns values
+                       else:
+                           new_pos_list = pos_list
+                           new_pos_list[iteration] = pos
+
+                           print(new_pos_list)
+                           return new_pos_list, g_obj, g_name
+
+                   # Render game
+                   self.screen.fill(WHITE)
+
+                   if variant == "combat":
+                       for textbox in self.textbox_combat_list:
+                           textbox.textbox_blit()
+                       for c in hero_list:
+                           self.screen.blit(c.image, c.rect)
+                       for e in enemy_list:
+                           if not e.downed:
+                                self.screen.blit(e.image, e.rect)
+                   # Blits all textboxes to fill screen with menu
+                   else:
+                       for textbox in self.textbox_menu_list:
+                           textbox.textbox_blit()
+                   self.screen.blit(self.pointer.image, self.pointer.rect)
+
+                   # Writes to main surface
+                   pygame.display.flip()
+
+
+class Platform(pygame.sprite.Sprite):
+    def __init__(self, x, y, name, location):
+        pygame.sprite.Sprite.__init__(self)
+        self.x = x * pix_sz
+        self.y = y * pix_sz
+   
+        self.variant = "block"
+        self.color = BLACK
+   
+        # Platforms for town
+        if location == "town":
+            # Grass
+            if name == " ":
+                self.color = LIGHT_GREEN
+            # Tree
+            elif name == "T":
+                self.color = GREEN
+            # Dirt
+            elif name == "D":
+                self.color = LIGHT_BROWN
+            # Path
+            elif name == "P":
+                self.color = BROWN
+            # Wall
+            elif name == "W":
+                self.color = GRAY
+                self.variant = "wall"
+   
+        # Platforms for world
+        elif location == "world":
+            # Ocean
+            if name == " ":
+                self.color = LIGHT_BLUE
+                self.variant = "wall"
+            # Grass
+            elif name == "G":
+                self.color = LIGHT_GREEN
+                self.variant = "grass"
+            # Forest
+            elif name == "F":
+                self.color = GREEN
+                self.variant = "forest"
+            # Rock
+            elif name == "R":
+                self.color = BROWN
+                self.variant = "wall"
+            # Dirt
+            elif name == "D":
+                self.color = LIGHT_BROWN
+                self.variant = "dirt"
+            # Path
+            elif name == "P":
+                self.color = BROWN
+                self.variant = "path"
+   
+        # Platforms for castle
+        elif location == "castle":
+            # Floor
+            if name == " ":
+                self.color = LIGHT_GRAY
+                self.variant = "floor"
+            # Wall
+            elif name == "W":
+                self.color = GRAY
+                self.variant = "wall"
+   
+        self.image = pygame.Surface((pix_sz, pix_sz))
+        self.image.convert()
+        self.image.fill(self.color)
+        self.rect = pygame.Rect(x, y, pix_sz, pix_sz)
+
+
+class Exit(pygame.sprite.Sprite):
+    def __init__(self, x, y, destination, dest_x, dest_y, location):
+        pygame.sprite.Sprite.__init__(self)
+        self.x = x * pix_sz
+        self.y = y * pix_sz
+        self.location = location
+   
+        self.destination = destination
+        self.dest_x = dest_x * pix_sz
+        self.dest_y = dest_y * pix_sz
+   
+        # Color
+        if self.location == "town":
+            self.color = GREEN
+        elif self.location == "world":
+            self.color = GRAY
+        elif self.location == "castle":
+            self.color = GRAY
+   
+        self.image = pygame.Surface((pix_sz, pix_sz))
+        self.image.convert()
+        self.image.fill(self.color)
+        self.rect = pygame.Rect(self.x, self.y, pix_sz, pix_sz)
+
+
+class Loot(pygame.sprite.Sprite):
+    def __init__(self, x, y, location, treasure):
+        pygame.sprite.Sprite.__init__(self)
+        self.x = x * pix_sz
+        self.y = y * pix_sz
+        self.location = location
+   
+        self.treasure = treasure
+        self.unopened = True
+   
+        # Color
+        self.color = BLACK
+        self.image = pygame.Surface((pix_sz, pix_sz))
+        self.image.convert()
+        self.image.fill(self.color)
+        self.rect = pygame.Rect(self.x, self.y, pix_sz, pix_sz)
+
+
+class Camera:
+    def __init__(self, container_town, container_world, container_castle):
+        self.x_offset = 0
+        self.y_offset = 0
+        self.container_town = container_town
+        self.container_world = container_world
+        self.container_castle = container_castle
+   
+    def update(self, player, container):
+        self.x_offset = - player.rect.centerx + win_w / 2
+        self.y_offset = - player.rect.centery + win_h / 2
+   
+        # Limit at borders
+        if self.x_offset < -(container.width - win_w):
+            self.x_offset = -(container.width - win_w)
+        elif self.x_offset > 0:
+            self.x_offset = 0
+        if self.y_offset < -(container.height - win_h):
+            self.y_offset = -(container.height - win_h)
+        elif self.y_offset > 0:
+            self.y_offset = 0
+   
+    def apply(self, obj):
+     return obj.rect.move((self.x_offset, self.y_offset))
+
+
+class Player(pygame.sprite.Sprite):
+    def __init__(self, container_town, container_world, container_castle, equip_list, item_list, run):
+        pygame.sprite.Sprite.__init__(self)
+        self.container_town = container_town
+        self.container_world = container_world
+        self.container_castle = container_castle
+        self.equip_list = equip_list
+        self.item_list = item_list
+        self.run = run
+   
+        self.speed = pix_sz * 0.125
+        self.town_x = self.container_town.centerx
+        self.town_y = self.container_town.height - 15 * pix_sz
+        self.world_x = self.container_world.centerx
+        self.world_y = self.container_world.height - 15 * pix_sz
+        self.castle_x = self.container_castle.centerx
+        self.castle_y = self.container_castle.height - 15 * pix_sz
+   
+        self.image = pygame.Surface((pix_sz, pix_sz)).convert()
+        self.rect = self.image.get_rect()
+        self.rect.centerx = self.world_x
+        self.rect.y = self.world_y
+        self.color = GRAY
+   
+        self.location = "world"
+        self.encounter_number = random.randrange(100, 150)
+   
+        self.gil = 1000
+        self.equip_inventory = [self.equip_list[4], self.equip_list[4], self.equip_list[4],
+                                self.equip_list[4], self.equip_list[-2], self.equip_list[-1]]
+        self.item_inven = [2, 0, 0]
+   
+        print(self.equip_inventory)
+        print(self.item_inven)
+   
+        self.forced_encounter = False
+   
+    def update(self, border_group, exit_group, loot_group, hero_list):
+        # Reads player inputs out of battle
+        if pygame.key.get_pressed:
+            encounter = "no encounter"
+   
+            key = pygame.key.get_pressed()
+            # Moves player on map
+            if key[pygame.K_w]:
+                self.move(border_group, exit_group, loot_group, "up")
+                encounter = self.check_encounter()
+            if key[pygame.K_s]:
+                self.move(border_group, exit_group, loot_group, "down")
+                encounter = self.check_encounter()
+            if key[pygame.K_a]:
+                self.move(border_group, exit_group, loot_group, "left")
+                encounter = self.check_encounter()
+            if key[pygame.K_d]:
+                self.move(border_group, exit_group, loot_group, "right")
+                encounter = self.check_encounter()
+   
+            # Opening menu
+            if key[pygame.K_m]:
+                print("Menu opened")
+                self.run.menu_loop(self, hero_list)
+   
+            if self.location == "town":
+                return "false"
+            else:
+                return encounter
+   
+    def move(self, border_group, exit_group, loot_group, direction):
+        # Moves spaces based on player's speed
+        if direction == "up":
+            self.rect.y -= self.speed
+        elif direction == "down":
+            self.rect.y += self.speed
+        elif direction == "left":
+            self.rect.x -= self.speed
+        elif direction == "right":
+            self.rect.x += self.speed
+   
+        # print("Location: " + str(self.rect.x / pix_sz) + " " + str(self.rect.y / pix_sz))
+   
+        # If player collides with a wall, move is undone
+        if pygame.sprite.spritecollide(self, border_group, False):
+            self.encounter_number += 1
+            if direction == "up":
+                self.rect.y += self.speed
+            elif direction == "down":
+                self.rect.y -= self.speed
+            elif direction == "left":
+                self.rect.x += self.speed
+            elif direction == "right":
+                self.rect.x -= self.speed
+   
+        # If player comes into contact with an exit (or goes out of town), goes to exit's destination
+        if pygame.sprite.spritecollide(self, exit_group, False):
+            ex = pygame.sprite.spritecollide(self, exit_group, False)[0]
+   
+            if ex.location == self.location:
+                self.location = ex.destination
+                self.rect.x = ex.dest_x
+                self.rect.y = ex.dest_y
+   
+                print("warp")
+        elif self.location == "town" and (not 15 * pix_sz < self.rect.x < 93 * pix_sz or
+                                              not 9 * pix_sz < self.rect.y < 47 * pix_sz):
+            self.location = "world"
+            self.rect.x = 38 * pix_sz
+            self.rect.y = 96 * pix_sz
+   
+            print("warp")
+   
+        # If player comes into contact with a loot chest, obtains loot
+        if pygame.sprite.spritecollide(self, loot_group, False):
+            l = pygame.sprite.spritecollide(self, loot_group, False)[0]
+   
+            # If in the same zone, adds item/equip to inventory
+            if self.location == l.location:
+                if l.unopened:
+                    # If in castle, begins forced encounter
+                    if self.location == "castle":
+                        self.forced_encounter = True
+   
+                    self.run.textbox_prompt.prompt(["Obtained " + l.treasure.name + ".", "", "", "", "", "", "", ""])
+   
+                    if isinstance(l.treasure, Equipment):
+                        print("Equipment obtained")
+                        self.update_equipment(l.treasure, "add", None)
+                    elif isinstance(l.treasure, Item):
+                        print("Item obtained")
+                        self.update_items(l.treasure, "add", None)
+                    l.unopened = False
+                else:
+                    self.run.textbox_prompt.prompt(["The chest is empty.", "", "", "", "", "", "", ""])
+   
+                self.encounter_number += 1
+                if direction == "up":
+                    self.rect.y += self.speed
+                elif direction == "down":
+                    self.rect.y -= self.speed
+                elif direction == "left":
+                    self.rect.x += self.speed
+                elif direction == "right":
+                    self.rect.x -= self.speed
+   
+    def check_encounter(self):
+        # If in a hostile area, encounters will randomly occur when the counter reaches 0
+        if self.location == "world" or self.location == "castle":
+            self.encounter_number -= 1
+   
+            # Random Encounter
+            if self.encounter_number <= 0:
+                if self.location == "world":
+                    self.encounter_number = random.randrange(200, 600)
+                elif self.location == "castle":
+                    self.encounter_number = random.randrange(300, 700)
+                print("Random encounter")
+                return "random"
+            # Forced Encounter
+            elif self.forced_encounter:
+                print("Forced encounter")
+                return "forced"
+            # Boss Encounter
+            elif self.location == "castle" and 47.75 * pix_sz < self.rect.x < 60.25 * pix_sz and \
+                                            26.0 * pix_sz < self.rect.y < 32.0 * pix_sz:
+                print("Boss encounter")
+                return "boss"
+            else:
+                return "no encounter"
+        else:
+            return "no encounter"
+   
+    def update_equipment(self, equip, variant, target):
+        # Updates the player's equipment inventory, effects vary on variant
+        # If equipment is dropped by enemies or found in chest
+        if variant == "add":
+            print("Obtained " + equip.name)
+            self.equip_inventory += [equip]
+        # If equipment is bought
+        elif variant == "buy":
+            if equip.buy_value < self.gil:
+                self.equip_inventory += [equip]
+                self.gil -= equip.buy_value
+                print(equip.name + " bought.")
+            else:
+                print("You don't have enough gil!")
+        # If equipment is equipped
+        elif variant == "equip":
+            no_weapon = self.equip_list[-2]
+            no_armor = self.equip_list[-1]
+            if target.variant in equip.can_equip:
+                # If equipment is a weapon
+                if equip.type == "weapon":
+                    if target.weapon != no_weapon:
+                        self.equip_inventory += [target.weapon]
+                    target.weapon = equip
+                # If equipment is armor
+                elif equip.type == "armor":
+                    if target.armor != no_armor:
+                        self.equip_inventory += [target.weapon]
+                    target.armor = equip
+                if equip != "None":
+                    self.equip_inventory -= [equip]
+                target.hero.update_stats(target)
+            # If equipment is not usable by character, item is not equipped
+            else:
+                print("Cannot be equipped by character's class")
+   
+        elif variant == "sell":
+            self.equip_inventory -= [equip]
+            self.gil += equip.sell_value
+   
+        lst = []
+        for e in self.equip_inventory:
+            lst += [e.name]
+   
+        print(lst)
+   
+    def update_items(self, item, variant, target):
+        # Updates the player's item inventory, effects vary on variant
+        # Item is added/subtracted to stock in inventory, position is needed for each stock
+        if item.name == "Potion":
+            i_pos = 0
+        elif item.name == "Phoenix Down":
+            i_pos = 1
+        else:
+            i_pos = 2
+   
+        # If item is dropped by enemies or found in chest
+        if variant == "add":
+            print("Obtained " + item.name)
+            self.item_inven[i_pos] += 1
+        # If item is bought
+        elif variant == "buy":
+            if item.buy_value < self.gil:
+                self.item_inven[i_pos] += 1
+                self.gil -= item.buy_value
+                print(item.name + " bought.")
+            else:
+                print("You don't have enough gil!")
+        elif variant == "consume":
+            if self.item_inven[i_pos] >= 1:
+                self.item_inven[i_pos] -= 1
+                item.use_item(target)
+            else:
+                print("No more " + item.name + "s in inventory")
+        elif variant == "sell":
+            self.item_inven[i_pos] -= 1
+            self.gil += item.sell_value
+   
+        print(self.item_inven)
+        
+
+class Hero:
+    def __init__(self, equip_list, run):
+        self.run = run
+        self.equip_list = equip_list
+    
+    def check_health(self, c, hero_list):
+        # Checks health to see if it is within bounds
+        # If <= 0 health, character is downed
+        if c.health <= 0:
+            c.health = 0
+            c.downed = True
+            print(c.name + " is downed")
+        else:
+            c.downed = False
+    
+        # If health exceeds max, current health = max health
+        if c.health > c.max_health:
+            c.health = c.max_health
+        # If energy exceeds max, current energy = max energy
+        if c.energy > c.max_energy:
+            c.energy = c.max_energy
+    
+        print(c.name + ": Health: " + str(c.health) + " / " + str(c.max_health))
+        print(c.name + ": Energy: " + str(c.energy) + " / " + str(c.max_energy))
+        print(" ")
+    
+        new_text_list = []
+        for line in range(0, 4):
+            if len(hero_list) - 1 >= line:
+                new_text_list += [hero_list[line].name + ": " + "HP: " + str(hero_list[line].health) + " / "
+                                  + str(hero_list[line].max_health)]
+                new_text_list += ["       EP: " + str(hero_list[line].energy) + " / " + str(hero_list[line].max_energy)]
+            else:
+                new_text_list += [""]
+    
+        self.run.textbox_health.update(new_text_list)
+    
+    def check_buffs(self, character):
+        # Checks to see if buffs should be active, if not, then deactivates them
+        # Checks for Temper
+        if character.temper_dura >= 1:
+            if character.temper_dura == 1:
+                print("Temper has worn off")
+                character.temper_bonus = 0
+            character.temper_dura -= 1
+        # Checks for Defend
+        if character.defend_dura >= 1:
+            if character.defend_dura == 1:
+                print("Defend has worn off")
+                character.defend_bonus = 0
+            character.defend_dura -= 1
+        # Checks for Protect
+        if character.protect_dura >= 1:
+            if character.protect_dura == 1:
+                print("Protect has worn off")
+                character.protect_bonus = 0
+            character.protect_dura -= 1
+    
+    def attack(self, player, source, hero_list, enemy_list):
+        # Character performs action based on previously determined inputs
+        print("Turn: " + source.name)
+        if not source.downed:
+            action = source.g_name[1][source.pos_list[0]][0]
+            self.run.textbox_prompt.message([source.name + ": " + action, "", "", "", "", "", "", ""])
+            # Attack
+            if source.pos_list[0] == 0:
+                target = enemy_list[source.pos_list[1]]
+    
+                print("Attacking " + str(target.name) + " " + str(target.position))
+                self.damage(source.attack * (1 + source.temper_bonus), target, enemy_list)
+    
+            # Defending has no action, but instead a buff applied before all other actions are taken
+            elif source.pos_list[0] == 1:
+                print("Defending")
+    
+            # Spells
+            elif source.pos_list[0] == 2:
+                magic = source.spell_list[source.pos_list[1]]
+                print("Casting " + magic.name)
+    
+                # Determines effect of spell depending on variant
+                # If variant is attack/heal, effect is the damage/healing done
+                if magic.variant == "attack":
+                    target = enemy_list[source.pos_list[2]]
+                    self.damage(magic.effect * (1 + source.temper_bonus), target, enemy_list)
+                elif magic.variant == "heal":
+                    target = hero_list[source.pos_list[2]]
+                    self.damage(magic.effect * (1 + source.temper_bonus), target, hero_list)
+    
+                # If variant is attack_all/heal_all, effect is the damage/healing done to all members
+                elif magic.variant == "attack_all":
+                    for target in enemy_list:
+                        if not target.downed:
+                            # If magic casted is Dia, target must also be undead to take damage
+                            if (magic.name == "Dia" and target.variant == "undead") or magic.name != "Dia":
+                                self.damage(magic.effect * (1 + source.temper_bonus), target, enemy_list)
+                elif magic.variant == "heal_all":
+                    for target in hero_list:
+                        if not target.downed:
+                            self.damage(magic.effect * (1 + source.temper_bonus), target, hero_list)
+    
+                # If variant is buff/debuff, effect is constant that multiplies with other values
+                elif magic.variant == "buff":
+                    target = hero_list[source.pos_list[2]]
+                    if magic.name == "Protect":
+                        target.protect_bonus = magic.effect
+                        target.protect_dura = 3
+                    elif magic.name == "Temper":
+                        target.temper_bonus = magic.effect
+                        target.temper_dura = 3
+                elif magic.variant == "debuff":
+                    target = enemy_list[source.pos_list[2]]
+                    if magic.name == "Weaken":
+                        target.weaken_debuff_bonus = magic.effect
+                        target.weaken_dura = 3
+    
+                # Subtracts energy cost of spell from character
+                print("Cost: " + str(magic.cost))
+                source.energy -= magic.cost
+                self.check_health(source, hero_list)
+    
+            # Items
+            elif source.pos_list[0] == 3:
+                item = source.g_obj[1][3][1][source.pos_list[1]][0]
+                target = hero_list[source.pos_list[2]]
+                print("Using " + item.name + " on " + target.name)
+    
+                item.use_item(target)
+    
+                target.hero.check_health(target, hero_list)
+    
+            # Run
+            elif source.pos_list[0] == 4:
+                # Gives a chance for the party to run away
+                print(source.name + " is attempting to run away.")
+    
+                chance = random.random() * 100
+                print(chance)
+                if chance > 40:
+                    print("The party ran away successfully.")
+                    print(" ")
+                    return "run success"
+                else:
+                    print("The party did not manage to run away.")
+                    print(" ")
+                    return "run fail"
+        else:
+            self.run.textbox_prompt.message([source.name + " is downed.", "", "", "", "", "", "", ""])
+            print(source.name + " is downed.")
+    
+        print(" ")
+        return "None"
+    
+    def damage(self, attack, target, target_list):
+        # Deals damage / heals to target
+        # If attack is positive, damage is dealt to enemy based on base damage times the damage negation (defense)
+        if attack >= 0:
+            dam = random.randrange(int(attack * 0.7), int(attack * 1.3))
+            # If selected enemy is downed, attacks another random enemy
+            if target.downed:
+                targets = []
+                for e in target_list:
+                    if not e.downed:
+                        targets += [e]
+    
+                target = random.sample(targets, 1)[0]
+    
+            dam_negate = (100 - target.defense) / 100
+            print("dam_negate: " + str(dam_negate))
+    
+            dam_dealt = int(dam * dam_negate)
+            target.health -= dam_dealt
+            print(target.name + " takes " + str(dam_dealt) + " damage.")
+            target.enemy.check_health(target)
+        # If attack is negative, target is healed for amount of damage given
+        else:
+            heal_dealt = random.randrange(int(attack * 1.3), int(attack * 0.7))
+            if not target.downed:
+                target.health -= heal_dealt
+                print(target.name + " is healed for " + str(- heal_dealt) + " health.")
+                target.hero.check_health(target, target_list)
+            else:
+                print("Spell has no effect, target is downed.")
+    
+    def update_stats(self, target):
+        # Updates character's stats to reflect level and equipment
+        target.max_health = int(target.max_health_base * target.multiplier)
+        target.max_energy = int(target.max_energy_base * target.multiplier)
+        target.attack = int((target.attack_base + target.weapon.attack + target.armor.attack) * target.multiplier)
+        target.defense = int((target.defense_base + target.weapon.defense + target.armor.defense) * target.multiplier)
+
+ 
+class CharacterHero:
+    def __init__(self, name, variant, position, class_list, spell_list, run, hero):
+        # Appearance on screen
+        self.name = name
+        self.image = pygame.Surface((32, 32)).convert()
+        self.rect = self.image.get_rect()
+        self.position = position
+        color_list = [RED, YELLOW, GREEN, BLUE]
+        self.rect.centerx = win_w * 0.85
+        self.rect.y = win_h * (0.05 + 0.15 * self.position)
+        self.color = color_list[self.position - 1]
+        self.image.fill(self.color)
+        self.run = run
+        self.hero = hero
+ 
+        # Class stats
+        self.variant = variant
+        self.health = class_list[self.variant][0]
+        self.max_health = class_list[self.variant][0]
+        self.max_health_base = class_list[self.variant][0]
+        self.energy = class_list[self.variant][1]
+        self.max_energy = class_list[self.variant][1]
+        self.max_energy_base = class_list[self.variant][1]
+        self.attack = class_list[self.variant][2]
+        self.attack_base = class_list[self.variant][2]
+        self.defense = class_list[self.variant][3]
+        self.defense_base = class_list[self.variant][3]
+        self.use_magic = class_list[self.variant][4]
+ 
+        # Determines usable magic based on class's ability to use magic
+        if self.use_magic == 1:
+            self.spell_list = [spell_list[0], spell_list[1], spell_list[2]]
+        elif self.use_magic == 2:
+            self.spell_list = [spell_list[4], spell_list[5], spell_list[6]]
+        elif self.use_magic == 3:
+            self.spell_list = [spell_list[0], spell_list[1], spell_list[6]]
+        else:
+            self.spell_list = ["None", "None", "None"]
+ 
+        # Settings
+        self.weapon = self.hero.equip_list[-2]
+        self.armor = self.hero.equip_list[-1]
+        self.level = 1
+        self.multiplier = 1
+        self.exp = 0
+        self.exp_needed = 50
+        self.downed = False
+ 
+        self.temper_bonus = 0
+        self.temper_dura = 0
+        self.defend_bonus = 0
+        self.defend_dura = 0
+        self.protect_bonus = 0
+        self.protect_dura = 0
+ 
+        # Menu settings for combat
+        self.pos_list = 0
+        self.g_obj = 0
+        self.g_name = 0
+ 
+    def update_class(self, class_list, variant):
+        # Updates class of default characters at character creation
+        self.variant = variant
+        self.health = class_list[self.variant][0]
+        self.max_health = class_list[self.variant][0]
+        self.max_health_base = class_list[self.variant][0]
+        self.energy = class_list[self.variant][1]
+        self.max_energy = class_list[self.variant][1]
+        self.max_energy_base = class_list[self.variant][1]
+        self.attack = class_list[self.variant][2]
+        self.attack_base = class_list[self.variant][2]
+        self.defense = class_list[self.variant][3]
+        self.defense_base = class_list[self.variant][3]
+        self.use_magic = class_list[self.variant][4]
+ 
+    def update_selection(self, select_list):
+        # Stores selection from character's turn to be used during their action
+        self.pos_list = select_list[0]
+        self.g_obj = select_list[1]
+        self.g_name = select_list[2]
+ 
+    def shift(self, x_offset, hero_list, enemy_list):
+        # Moves Character's rect over by x_offset over time, blits all in combat_loop
+        self.rect.x += x_offset
+ 
+        # Renders game
+        self.run.screen.fill(WHITE)
+ 
+        for textbox in self.run.textbox_combat_list:
+            textbox.textbox_blit()
+        for c in hero_list:
+            self.run.screen.blit(c.image, c.rect)
+        for e in enemy_list:
+            if not e.downed:
+                 self.run.screen.blit(e.image, e.rect)
+ 
+        # Writes to main surface
+        pygame.display.flip()
+ 
+
+class Equipment:
+    def __init__(self, name, variant, attack, defense, value, can_equip):
+        self.name = name
+        self.variant = variant
+        self.attack = attack
+        self.defense = defense
+        self.targets = (4, 5, 6, 7)
+        self.buy_value = value
+        self.sell_value = value * 0.5
+   
+        self.can_equip = can_equip
+
+
+class Item:
+    def __init__(self, name, variant, strength, value, desc):
+        self.name = name
+        self.variant = variant
+        self.strength = strength
+        self.targets = (4, 5, 6, 7)
+        self.buy_value = value
+        self.sell_value = value * 0.5  
+        
+        self.desc = desc    
+        
+    def use_item(self, target):
+        # Adds health
+        if self.variant == "health":
+            if target.downed:
+                print("Item has no effect, target is downed")
+            else:
+                target.health += self.strength
+        # Adds health (Phoenix down, revives downed party members)
+        elif self.variant == "greater_health":
+            target.health += self.strength
+        # Adds energy
+        elif self.variant == "energy":
+            if target.downed:
+                print("Item has no effect, target is downed")
+            else:
+                target.energy += self.strength
+
+
+class Spell:
+    def __init__(self, run):
+        # Superclass to allow a spell to be used
+        self.run = run  
+        
+    def use_spell(self, target, spell, source):
+        # Casts spell, effect is based on type of spell and target
+        source.energy -= spell.cost
+        # Attacks/heals one target
+        if spell.variant == "attack":
+            target.health -= spell.effect
+        # Attacks/heals all in spell's target list
+        elif spell.variant == "attack_all":
+            for t in spell.targets:
+                t.health -= spell.effect
+        # Debuffs target
+        elif spell.variant == "status":
+            if spell.name == "Weaken":
+                target.weaken_debuff = spell.effect
+                target.weaken_dura = 3
+        # Buffs ally target
+        elif spell.variant == "buff":
+            if spell.name == "Protect":
+                target.defense_multiplier = spell.effect
+            elif spell.name == "Temper":
+                target.attack_multiplier = spell.effect
+
+
+class SpellVariant:
+    def __init__(self, spell, name, variant, usable, targets, cost, effect_strength, out_of_combat, desc):
+        # Defines a spell and its individual properties/effects
+        self.spell = spell
+        self.name = name
+        self.variant = variant
+        self.usable = usable
+        self.targets = targets
+        self.cost = cost
+    
+        # If variant is attack/heal, effect is the damage/healing done
+        # If variant is attack_all/heal_all, effect is the damage/healing done to all members
+        # If variant is buff/debuff, effect is constant that multiplies with other values
+        self.effect = effect_strength
+    
+        # If true, spell can be used in pause menu (healing spells)
+        self.out_of_combat = out_of_combat
+    
+        self.desc = desc
+
+
+class Enemy:
+    def __init__(self, run):
+          self.run = run
+
+    def check_health(self, e):
+        # Checks health to see if it is within bounds
+        # If <= 0 health, character is downe
+        if e.health <= 0:
+            e.health = 0
+            e.downed = True
+            print(e.name + " " + str(e.position) + " is downed")
+        else:
+            e.downed = False
+        # If health exceeds max, current health = max health
+        if e.health > e.max_health:
+            e.health = e.max_health
+
+        print(e.name + " " + str(e.position) + ": " + str(e.health) + " / " + str(e.max_health))
+
+    def attack(self, source, hero_list):
+        # Enemy Selects a random (not downed) hero to attack
+        if not source.downed:
+            self.run.textbox_prompt.message([source.name + ": Attack", "", "", "", "", "", "", ""])
+            print("Turn: " + source.name + " " + str(source.position))
+            targets = []
+            for c in hero_list:
+                if not c.downed:
+                    targets += [c]
+            target = random.sample(targets, 1)[0]
+            print("Attacking " + str(target.name))
+            self.damage(random.randrange(int(source.attack * 0.7), int(source.attack * 1.3)), target, hero_list)
+        else:
+            print(source.name + " " + str(source.position) + " is downed")
+        print(" ")
+
+    def damage(self, dam, target, target_list):
+        # Deals damage to target
+        dam_negate = (100 - target.defense - target.protect_bonus) * (100 - target.defend_bonus) * 0.0001
+        print("dam_negate: " + str(dam_negate))
+        # Damage is dealt to enemy based on base damage times the damage negation (defense)
+        if dam >= 0:
+            dam_dealt = int(dam * dam_negate)
+            target.health -= dam_dealt
+            print(target.name + " takes " + str(dam_dealt) + " damage.")
+            target.hero.check_health(target, target_list)
+
+    def shift(self, x_offset, hero_list, enemy_list, target):
+        # Moves Character's rect over by x_offset over time, blits all in combat_loop
+        target.rect.x += x_offset
+        # Renders game
+        self.run.screen.fill(WHITE)
+        for textbox in self.run.textbox_combat_list:
+            textbox.textbox_blit()
+        for c in hero_list:
+            self.run.screen.blit(c.image, c.rect)
+        for e in enemy_list:
+            if not e.downed:
+                 self.run.screen.blit(e.image, e.rect)
+        # Writes to main surface
+        pygame.display.flip()
+
+
+class GoblinEnemy:
+    def __init__(self, enemy, position):
+        self.image = pygame.Surface((32, 32)).convert()
+        self.rect = self.image.get_rect()
+
+        self.enemy = enemy
+        self.name = "Goblin"
+        self.variant = "living"
+        self.position = position
+
+        self.health = 25
+        self.max_health = 25
+        self.downed = False
+        self.defense = 0
+        self.attack = 15
+
+        self.exp_drop = 15
+        self.gil_drop = 8
+
+        self.weaken_debonus = 0
+        self.weaken_dura = 0
+
+        self.rect.centerx = win_w * 0.15
+        self.rect.y = win_h * (0.2 * self.position)
+        self.color = BLACK
+
+
+class WolfEnemy:
+    def __init__(self, enemy, position):
+        self.image = pygame.Surface((32, 32)).convert()
+        self.rect = self.image.get_rect()
+
+        self.enemy = enemy
+        self.name = "Wolf"
+        self.variant = "living"
+        self.position = position
+
+        self.health = 15
+        self.max_health = 15
+        self.downed = False
+        self.defense = 0
+        self.attack = 17
+
+        self.exp_drop = 17
+        self.gil_drop = 15
+
+        self.weaken_debonus = 0
+        self.weaken_dura = 0
+
+        self.rect.centerx = win_w * 0.15
+        self.rect.y = win_h * (0.2 * self.position)
+        self.color = BLACK
+
+
+class OgreEnemy:
+    def __init__(self, enemy, position):
+        self.image = pygame.Surface((32, 32)).convert()
+        self.rect = self.image.get_rect()
+
+        self.enemy = enemy
+        self.name = "Ogre"
+        self.variant = "living"
+        self.position = position
+
+        self.health = 75
+        self.max_health = 75
+        self.downed = False
+        self.defense = 25
+        self.attack = 30
+
+        self.exp_drop = 112
+        self.gil_drop = 112
+
+        self.weaken_debonus = 0
+        self.weaken_dura = 0
+
+        self.rect.centerx = win_w * 0.15
+        self.rect.y = win_h * (0.2 * self.position)
+        self.color = BLACK
+
+
+class GhoulEnemy:
+    def __init__(self, enemy, position):
+        self.image = pygame.Surface((32, 32)).convert()
+        self.rect = self.image.get_rect()
+
+        self.enemy = enemy
+        self.name = "Ghoul"
+        self.variant = "undead"
+        self.position = position
+
+        self.health = 40
+        self.max_health = 40
+        self.downed = False
+        self.defense = 0
+        self.attack = 15
+
+        self.exp_drop = 37
+        self.gil_drop = 37
+
+        self.weaken_debonus = 0
+        self.weaken_dura = 0
+
+        self.rect.centerx = win_w * 0.15
+        self.rect.y = win_h * (0.2 * self.position)
+        self.color = BLACK
+
+
+class SkeletonEnemy:
+    def __init__(self, enemy, position):
+        self.image = pygame.Surface((32, 32)).convert()
+        self.rect = self.image.get_rect()
+
+        self.enemy = enemy
+        self.name = "Skeleton"
+        self.variant = "undead"
+        self.position = position
+
+        self.health = 50
+        self.max_health = 50
+        self.downed = False
+        self.defense = 0
+        self.attack = 35
+
+        self.exp_drop = 62
+        self.gil_drop = 62
+
+        self.weaken_debonus = 0
+        self.weaken_dura = 0
+
+        self.rect.centerx = win_w * 0.15
+        self.rect.y = win_h * (0.2 * self.position)
+        self.color = BLACK
+
+
+class GargoyleEnemy:
+    def __init__(self, enemy, position):
+        self.image = pygame.Surface((32, 32)).convert()
+        self.rect = self.image.get_rect()
+
+        self.enemy = enemy
+        self.name = "Gargoyle"
+        self.variant = "undead"
+        self.position = position
+
+        self.health = 80
+        self.max_health = 80
+        self.downed = False
+        self.defense = 0
+        self.attack = 15
+
+        self.exp_drop = 62
+        self.gil_drop = 62
+
+        self.weaken_debonus = 0
+        self.weaken_dura = 0
+
+        self.rect.centerx = win_w * 0.15
+        self.rect.y = win_h * (0.2 * self.position)
+        self.color = BLACK
+
+
+class BossEnemy:
+    def __init__(self, enemy, position):
+        self.image = pygame.Surface((64, 64)).convert()
+        self.rect = self.image.get_rect()
+
+        self.enemy = enemy
+        self.name = "Omega"
+        self.variant = "undead"
+        self.position = position
+
+        self.health = 200
+        self.max_health = 200
+        self.downed = False
+        self.defense = 0
+        self.attack = 45
+
+        self.exp_drop = 1
+        self.gil_drop = 1
+
+        self.weaken_debonus = 0
+        self.weaken_dura = 0
+
+        self.rect.centerx = win_w * 0.15
+        self.rect.y = win_h * (0.2 * self.position)
+        self.color = BLACK
+
+
+class NoneEnemy:
+    def __init__(self, enemy, position):
+        self.image = pygame.Surface((32, 32)).convert()
+        self.rect = self.image.get_rect()
+
+        self.enemy = enemy
+        self.name = "None-enemy"
+        self.variant = "living"
+        self.position = position
+        self.health = 0
+        self.max_health = 0
+        self.downed = True
+        self.defense = 0
+        self.attack = 0
+
+        self.exp_drop = 0
+        self.gil_drop = 0
+
+        self.weaken_debonus = 0
+        self.weaken_dura = 0
+
+        self.rect.centerx = win_w * 0.15
+        self.rect.y = win_h * (0.2 * self.position)
+        self.color = BLACK
+
+
+def main():
+   pygame.display.set_caption("Final Fantasy Clone")
+
+   run = Game(fps)
+
+   # Local variables
+   result = "false"
+
+   # Town: " " = grass, T = tree, D = dirt, P = path, W = wall, L = loot, E = exit
+   town = [
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                       L                     ",
+       "                                                                                                             ",
+       "                 WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW                 ",
+       "                 W                                                                         W                 ",
+       "                 W                                                                         W                 ",
+       "                 W                                                                         W                 ",
+       "                 W                                                                         W                 ",
+       "                 W                                                                         W                 ",
+       "                 W                                                                         W                 ",
+       "                 W           P                                                 P           W                 ",
+       "                 W           P                                                 P           W                 ",
+       "                 W        PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP        W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W               P                                         P               W                 ",
+       "                 W           P   P                                         P   P           W                 ",
+       "                 W           P   P                                         P   P           W                 ",
+       "                 W        PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP        W                 ",
+       "                 W                                    P                                    W                 ",
+       "                 W                               T    P    T                               W                 ",
+       "                 W                                    P                                    W                 ",
+       "                 W                               T    P    T                    T          W                 ",
+       "                 W      T   T                         P                      T             W                 ",
+       "                 W    T                          T    P    T                      T        W                 ",
+       "                 W        T                           P                        T           W                 ",
+       "                 W                               T    P    T                               W                 ",
+       "                 W                                    P                                    W                 ",
+       "                 WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW  P  WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW                 ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             "]
+
+   # Level: " " = water, G = grass, F = forest, R = rock, D = dirt, P = path, T = town, C = castle, L = loot
+   world = [
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                 DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                 ",
+       "                 DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                 ",
+       "                                          DDDDDDDDDDDDDDDDDD                                                 ",
+       "                                      DDDDDDDDDDDDDDDDDDDDDDDDDDD                                            ",
+       "                                   DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                          ",
+       "                                DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                       ",
+       "                               DDDDDDDDDDDDDDDDDDDDCDDDDDDDDDDDDDDDDDD                                       ",
+       "                              DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                    ",
+       "                             DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                   ",
+       "                             DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                ",
+       "                             DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                   ",
+       "                             DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                  ",
+       "                             DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                   ",
+       "                             DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                     ",
+       "                              DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                     ",
+       "                               DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                     ",
+       "                                DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                       ",
+       "                             DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                   ",
+       "                            DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                            ",
+       "                            DDDDDDDDDDDDDDDDDGGGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDGGGG                           ",
+       "                             DDDDDDDDDDDGGGGGGGGGGGGGGGGGDDDDDDDDDDDDDDDDDDDDGGGGGGGG                        ",
+       "                           GGGGGDDDDGGGGGGGGGGGGGGGGGGGGGGGGGGDDDDGGGGGGGGGGGGGGGGGGG                        ",
+       "                         GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGDDGGGGGGGGGGGGGGG                            ",
+       "                         GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                              ",
+       "                         GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                                ",
+       "                     GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                               ",
+       "                   GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                               ",
+       "                   GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                            ",
+       "                    GGGGGGRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRGGGGGGRRRRRRRRRRRR                        ",
+       "                   GGGGGRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRGGGGRRRRRRRRRRRRRRRR                     ",
+       "                    GGGGRRRRRRRRRRRRRRRRRGGGGGGGGGGGGRRRRRRRRRRGGGGGGGRRRRRRRRRRRRRRRRRRR                    ",
+       "                    GGGGGGRRRRRRRRRRRRGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGRRRRRRRRRRRRRRRRRRR                     ",
+       "                   GGGGGRRRRRRRRRRRRGGGGGGRRRRGGGGGRRRRRGGGGGGGGGRRRRRRRRGGRRRRRRRRRRRRR                     ",
+       "                    GGGGRRRRRRRRRRRRGGGGRRRRRRGGGGRRRRRRRRRRRRRRRRRRRRRGGGGGGGGRRRRRRRRRR                    ",
+       "                    GGGGGGRRRRRRRRRRRRRRRRRRRRGGGRRRRRRRRRRRRRRRRRRRRRGGGGGGGGRRRRRRRRR                      ",
+       "                   GGGGGRRRRRRRRRRRRRRRRRRRRRGGGGRRRRRRRRRRRRRRRRRRRRRGGGGGRRRRRRRRRRRRR                     ",
+       "                    GGGGRRRRRRRRRRRRRRRRRRRRGGGGGGGGGGGRRRRRRRRRRRRRRGGGGRRRRRRRRRRRRRRRR                    ",
+       "                     GGGGRRRRRRRRRRRRRRRRRGGGGRRRGGGGGGGGGGGRRRRRRGGGGGGRRRRRRRRRRRRRRRRR                    ",
+       "                     GGGGGGRRRRRRRRRRRRRRGGGGRRRRRRRRRRGGGGGGGGGGGGGGRRRRRRRRRRRRRRRRRRRRR                   ",
+       "                      GGGGGRRRRRRRRRRRRRRGGRRRRRRRRRRRRRRGGGGGGGGGGGGRRRRRRRRRRRRRRRRRRRR                    ",
+       "                      GGLGGRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRGGGGRRRRRRRRRRRRRRRRRRRRRRRR                     ",
+       "                     GGGGGRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRGGGGRRRRRRRRRRRRRRRRRRRRRR                       ",
+       "                      GGGRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRGGGGRRRRRRRRRRRRRRRR                             ",
+       "                                        RRRRRRRRRRRRRRRRRRGGGGGGGGRRRRRRRRR                                  ",
+       "                                                          GGGGGGGG                                           ",
+       "                                     GGG                  GGGGGGGGG                                          ",
+       "                                   GGGGGGGGGG      GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                          ",
+       "                        GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGFGGGGGGGGGGG                    ",
+       "                   GGGGGGGGGGGGFGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGFGGGGGGGGGGGGGGGGG                 ",
+       "                 GGGGGGGGGGGGGGGGGFGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGFGGGGGGGGGGG                 ",
+       "                 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                   ",
+       "                 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                 ",
+       "                 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                   ",
+       "                 GGGGGGGGGGGGGGGGGFGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGFGGGGGGGGGGGGGG                 ",
+       "                 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGFGGGGGGGGGGGGGGGGGG                   ",
+       "                 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGFGGGGGGGGGGGGGGG                 ",
+       "                 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                   ",
+       "                   GGGGGGGFGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                        ",
+       "                   GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                                ",
+       "                     GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                                    ",
+       "                      GFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGGGGG                                                 ",
+       "                      GFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGG                                                    ",
+       "                     GFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFG                                                      ",
+       "                   GGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGGGGG                                                ",
+       "                    GFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGGG                                            ",
+       "                     GFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGGG                                        ",
+       "                      GGGFFFFFFFFFFFFFFFFFFGFFFFFFFFFFFFFFFFFFFFFFFFFGGGGGGG                                 ",
+       "                         GFFFFFFFFFFFFFFFFGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGG                              ",
+       "                          GFFFFFFFFFFFFFFFGGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGG                            ",
+       "                          GFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGGG                        ",
+       "                         GFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGFFFFFFFFFFFFFFFGGG                       ",
+       "                     GGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGGFFFFFFFFFFFFFGGGGGGGG                    ",
+       "                  GGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGGGGGGGGGGGG                   ",
+       "                 GGGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGGGGGGGGGGGGGGGGGGG                  ",
+       "                 GGGGGGGGFFFFFFFFFFFFFFFFFFFFFFGGFFFFFFFFFFFFFFFFFFFFGGGGGGGGGGGGGGGGGGGGGG                  ",
+       "                 GGGGGGGGGGGGGGGGFFFFFFFFFFFFFGGGGGGFFFFFFFFFFFGGGGGGGGGGGGGGGGGGGGGGGGGGG                   ",
+       "                 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                     ",
+       "                 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                         ",
+       "                 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                            ",
+       "                  GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                            ",
+       "                  GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                           ",
+       "                   GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                          ",
+       "                   GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                           ",
+       "                     GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                           ",
+       "                      GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                              ",
+       "                        GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                                 ",
+       "                         GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                                     ",
+       "                         GGGGGGGGGGGGGTGGGGGGGGGGGGGGGGGGGGGGGGGGGGG                                         ",
+       "                          GGGGGGGGGGGGGGGGGGGGGGGGGGGGG        GGGGGG                                        ",
+       "                           GG  GGGGGGGGGGGGG                    GGGGGG                                       ",
+       "                            GG   GGGGGGGGGG                        GGGG                                      ",
+       "                             GGG  GGGGGGGGG                          G                                       ",
+       "                                   GGGGGGG                                                                   ",
+       "                                     GGGGGGG                                                                 ",
+       "                                       GGGGGGGG                                                              ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             "]
+
+   # Castle: " " = floor, W = wall, L = loot, E = exit
+   castle = [
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                 WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW                 ",
+       "                 W                      W                           W                      W                 ",
+       "                 W                      W                           W                      W                 ",
+       "                 W                      WWWWWWWWWWWWWWWWWWWWWWWWWWWWW                      W                 ",
+       "                 W   WWWWWWWWWWWWWWWW                                   WWWWWWWWWWWWWWWW   W                 ",
+       "                 W   W           L  W                                   W  L           W   W                 ",
+       "                 W   W              W                                   W              W   W                 ",
+       "                 W   W              W             W       W             W              W   W                 ",
+       "                 W   W              W             W       W             W              W   W                 ",
+       "                 W   W              W             W       W             W              W   W                 ",
+       "                 W   WWWW  WWWWWWWWWWWWWWWWWWWWWWWW       WWWWWWWWWWWWWWWWWWWWWWWW  WWWW   W                 ",
+       "                 W                                                                         W                 ",
+       "                 W                                                                         W                 ",
+       "                 W                                                                         W                 ",
+       "                 W   WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW   W                 ",
+       "                 W   W                         W             W                         W   W                 ",
+       "                 W   W                         W      E      W                         W   W                 ",
+       "                 W   W                         W             W                         W   W                 ",
+       "                 W   W                         W             W                         W   W                 ",
+       "                 W   W                         W             W                         W   W                 ",
+       "                 W   W                         W             W                         W   W                 ",
+       "                 W   W                         W             W                         W   W                 ",
+       "                 W   W                         WWWWWW   WWWWWW                         W   W                 ",
+       "                 W                                                                         W                 ",
+       "                 W                                                                         W                 ",
+       "                 W                                                                         W                 ",
+       "                 W   W                                                                 W   W                 ",
+       "                 W   W                                                                 W   W                 ",
+       "                 W   W                                                                 W   W                 ",
+       "                 W   WWWWWWWWWWWW   WWWWWWWWWWWWWWW       WWWWWWWWWWWWWWW   WWWWWWWWWWWW   W                 ",
+       "                 W                                W       W                                W                 ",
+       "                 W                                W       W                                W                 ",
+       "                 W                                W       W                                W                 ",
+       "                 W   WWWWWWWWWWWWWWWW                                   WWWWWWWWWWWWWWWW   W                 ",
+       "                 W   W           L  W                                   W  L           W   W                 ",
+       "                 W   W              W                                   W              W   W                 ",
+       "                 W   W              W             W       W             W              W   W                 ",
+       "                 W   W              W             W       W             W              W   W                 ",
+       "                 W   W              W             W       W             W              W   W                 ",
+       "                 W   WWWW  WWWWWWWWWWWWWWWWWWWWWWWW       WWWWWWWWWWWWWWWWWWWWWWWW  WWWW   W                 ",
+       "                 W                                                                         W                 ",
+       "                 W                                                                         W                 ",
+       "                 W                                                                         W                 ",
+       "                 WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW   WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW                 ",
+       "                                                    W   W                                                    ",
+       "                                                    W   W                                                    ",
+       "                                                    W   W                                                    ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             ",
+       "                                                                                                             "]
+
+   town_w = len(town[0]) * pix_sz
+   town_h = len(town) * pix_sz
+   world_w = len(world[0]) * pix_sz
+   world_h = len(world) * pix_sz
+   castle_w = len(castle[0]) * pix_sz
+   castle_h = len(castle) * pix_sz
+
+   # Objects
+
+   # Weapons
+   broadsword = Equipment("Broadsword", "weapon", 15, 5, 1000, [0])
+   saber = Equipment("Saber", "weapon", 20, 0, 900, [0, 1])
+   nunchucks = Equipment("Nunchucks", "weapon", 20, 5, 500, [2])
+   staff = Equipment("Staff", "weapon", 10, 0, 200, [0, 1, 2, 3, 4, 5])
+   dagger = Equipment("Dagger", "weapon", 5, 0, 50, [0, 1, 2, 3, 4, 5])
+   ph_we = Equipment("No Weapon", "weapon", 0, 0, 0, [0, 1, 2, 3, 4, 5])
+   # Armor
+   plate_armor = Equipment("Plate Armor", "armor", 0, 30, 1000, [0])
+   leather_armor = Equipment("Leather Armor", "armor", 0, 15, 600, [0, 1, 2])
+   cloth_robes = Equipment("Cloth Armor", "armor", 0, 10, 300, [0, 1, 2, 3, 4, 5])
+   ph_ar = Equipment("No Armor", "armor", 0, 0, 0, [0, 1, 2, 3, 4, 5])
+   equip_list = [broadsword, saber, nunchucks, staff, dagger, plate_armor, leather_armor, cloth_robes, ph_we, ph_ar]
+
+   # Items
+   potion = Item("Potion", "health", 40, 50, "Heals 40 HP")
+   phoenix_down = Item("Phoenix Down", "greater_health", 1, 500, "Revives Downed Party Members")
+   energy_potion = Item("Energy Potion", "energy", 25, 50, "Recovers 25 Energy")
+   item_list = [potion, phoenix_down, energy_potion]
+
+   # Spells
+   spell = Spell(run)
+   # White Magic
+   cure = SpellVariant(spell, "Cure", "heal", 1, "ally", 3, -30, True, "Heals One Ally")
+   protect = SpellVariant(spell, "Protect", "buff", 1, "ally", 3, 30, False, "Raises DEF of One Ally (3 Turns)")
+   heal = SpellVariant(spell, "Heal", "heal_all", 1, "ally", 8, -30, True, "Heals All Allies")
+   dia = SpellVariant(spell, "Dia", "attack_all", 1, "enemy", 3, 50, False, "Deals Damage to All Undead Foes")
+   # Black Magic
+   fire = SpellVariant(spell, "Fire", "attack", 2, "enemy", 3, 50, False, "Deals Damage to One Enemy")
+   temper = SpellVariant(spell, "Temper", "buff", 2, "ally", 3, 30, False, "Raises ATK of One Ally (3 Turns)")
+   weaken = SpellVariant(spell, "Weaken", "debuff", 2, "enemy", 3, 30, False, "Lowers ATK of One Enemy (3 Turns)")
+   fira = SpellVariant(spell, "Fira", "attack_all", 2, "enemy", 8, 100, False, "Deals Damage to All Enemies")
+   spell_list = [cure, protect, heal, dia, fire, temper, weaken, fira]
+   # [health, energy, attack, %defense, use_magic, usable_equipment]
+   # use_magic: 0 = none, 1 = white, 2 = black, 3 = all
+   class_list = [[100, 0, 25, 30, 0], [75, 0, 35, 20, 0],
+                 [90, 0, 30, 30, 0], [70, 30, 15, 5, 1],
+                 [60, 25, 15, 5, 2], [55, 25, 15, 5, 3]]
+
+   container_town = pygame.Rect(0, 0, town_w, town_h)
+   container_world = pygame.Rect(0, 0, world_w, world_h)
+   container_castle = pygame.Rect(0, 0, castle_w, castle_h)
+   camera = Camera(container_town, container_world, container_castle)
+   player = Player(container_town, container_world, container_castle, equip_list, item_list, run)
+
+   # Create groups
+
+   hero = Hero(equip_list, run)
+   hero_1 = CharacterHero("Alpha", 0, 1, class_list, spell_list, run, hero)
+   hero_2 = CharacterHero("Beta", 1, 2, class_list, spell_list, run, hero)
+   hero_3 = CharacterHero("Gamma", 4, 3, class_list, spell_list, run, hero)
+   hero_4 = CharacterHero("Delta", 3, 4, class_list, spell_list, run, hero)
+
+   hero_list = [hero_1, hero_2, hero_3, hero_4]
+
+   enemy = Enemy(run)
+   enemy_1 = GoblinEnemy(enemy, 1)
+   enemy_2 = GoblinEnemy(enemy, 2)
+   enemy_3 = GhoulEnemy(enemy, 3)
+
+   enemy_list = [enemy_1, enemy_2, enemy_3]
+
+   # Platforms/exits/loot for town
+   plat_group_t = pygame.sprite.Group()
+   bord_group_t = pygame.sprite.Group()
+   x = y = 0
+   print("Town:")
+   for row in town:
+       for column in row:
+           p = run.create_plat(x, y, column, "town")
+           plat_group_t.add(p)
+           if p.variant == "wall":
+               bord_group_t.add(p)
+           x += pix_sz
+       y += pix_sz
+       x = 0
+
+   loot_t_1 = Loot(87, 9, "town", broadsword)
+
+   # Platforms/exits/loot for world
+   plat_group_w = pygame.sprite.Group()
+   bord_group_w = pygame.sprite.Group()
+   x = y = 0
+   print("World:")
+   for row in world:
+       for column in row:
+           p = run.create_plat(x, y, column, "world")
+           plat_group_w.add(p)
+           if p.variant == "wall":
+               bord_group_w.add(p)
+           x += pix_sz
+       y += pix_sz
+       x = 0
+
+   exit_w_1 = Exit(51, 14, "castle", 54, 53, "world")
+   exit_w_2 = Exit(38, 95, "town", 54, 44, "world")
+   loot_w_1 = Loot(24, 48, "world", phoenix_down)
+
+   # Platforms/exits/loot for castle
+   plat_group_c = pygame.sprite.Group()
+   bord_group_c = pygame.sprite.Group()
+   x = y = 0
+   print("Castle:")
+       for row in castle:
+       for column in row:
+           p = run.create_plat(x, y, column, "castle")
+           plat_group_c.add(p)
+           if p.variant == "wall":
+               bord_group_c.add(p)
+           x += pix_sz
+       y += pix_sz
+       x = 0
+
+   exit_c_1 = Exit(53, 55, "world", 51, 16, "castle")
+   exit_c_2 = Exit(54, 55, "world", 51, 16, "castle")
+   exit_c_3 = Exit(55, 55, "world", 51, 16, "castle")
+   loot_c_1 = Loot(33, 45, "castle", dagger)
+   loot_c_2 = Loot(75, 45, "castle", plate_armor)
+   loot_c_3 = Loot(33, 16, "castle", saber)
+   loot_c_4 = Loot(75, 16, "castle", potion)
+
+   container = camera.container_world
+   plat_group = plat_group_w
+   bord_group = bord_group_w
+
+   exit_group = pygame.sprite.Group()
+   exit_group.add(exit_w_1, exit_w_2, exit_c_1, exit_c_2, exit_c_3)
+   loot_group = pygame.sprite.Group()
+   loot_group.add(loot_t_1, loot_w_1, loot_c_1, loot_c_2, loot_c_3, loot_c_4)
+
+   while True:
+       run.beginning = run.running = run.ending = True
+
+       # Runs Intro
+       while run.beginning:
+           # Read inputs
+           for event in pygame.event.get():
+               # Allows the red button to function
+               if event.type == pygame.QUIT:
+                   pygame.quit()
+                   sys.exit()
+               elif event.type == pygame.KEYDOWN:
+                   if event.key == pygame.K_ESCAPE:
+                       sys.exit()
+
+               # Exit loop
+               if event.type == pygame.MOUSEBUTTONDOWN or pygame.key.get_pressed()[pygame.K_RETURN] or \
+                               pygame.key.get_pressed()[pygame.K_SPACE] != 0:
+                   run.beginning = False
+
+           # Render Title
+           run.screen.fill(BLACK)
+           run.text_blit([[run.title], [run.subtitle, 1]])
+
+           # Writes to main surface
+           pygame.display.flip()
+
+       # Runs Game
+       while run.running:
+           # Read inputs
+           for event in pygame.event.get():
+               # Allows the red button to function
+               if event.type == pygame.QUIT:
+                   pygame.quit()
+                   sys.exit()
+               elif event.type == pygame.KEYDOWN:
+                   if event.key == pygame.K_ESCAPE:
+                       sys.exit()
+
+           if player.location == "town":
+               container = camera.container_town
+               plat_group = plat_group_t
+               bord_group = bord_group_t
+           elif player.location == "world":
+               container = camera.container_world
+               plat_group = plat_group_w
+               bord_group = bord_group_w
+           elif player.location == "castle":
+               container = camera.container_castle
+               plat_group = plat_group_c
+               bord_group = bord_group_c
+
+           # Update
+           encounter = player.update(bord_group, exit_group, loot_group, hero_list)
+           camera.update(player, container)
+
+           if encounter == "random" or encounter == "forced" or encounter == "boss":
+               print("Starting encounter")
+               result = run.combat_loop(player, hero_list, enemy, enemy_list, plat_group_w, encounter)
+               if result == "lose" or encounter == "boss":
+                   run.running = False
+
+           # Render game
+           run.screen.fill(WHITE)
+
+           for p in plat_group:
+               run.screen.blit(p.image, camera.apply(p))
+           for ex in exit_group:
+               if ex.location == player.location:
+                   run.screen.blit(ex.image, camera.apply(ex))
+           for l in loot_group:
+               if l.location == player.location:
+                   run.screen.blit(l.image, camera.apply(l))
+
+           run.screen.blit(player.image, camera.apply(player))
+
+           # Writes to main surface
+           pygame.display.flip()
+
+       # Runs ending
+       while run.ending:
+           # Read inputs
+           for event in pygame.event.get():
+               # Allows the red button to function
+               if event.type == pygame.QUIT:
+                   pygame.quit()
+                   sys.exit()
+               elif event.type == pygame.KEYDOWN:
+                   if event.key == pygame.K_ESCAPE:
+                       sys.exit()
+
+               # Exits loop
+               if event.type == pygame.MOUSEBUTTONDOWN or pygame.key.get_pressed()[pygame.K_RETURN] or \
+                               pygame.key.get_pressed()[pygame.K_SPACE] != 0:
+                   run.ending = False
+
+           # Render ending
+           run.screen.fill(BLACK)
+           if result == "win":
+               run.text_blit([[run.end_title_win], [run.end_subtitle, 1]])
+           else:
+               run.text_blit([[run.end_title_lose], [run.end_subtitle, 1]])
+
+           # Writes to main surface
+           pygame.display.flip()
+
+       break
+
+
+if __name__ == "__main__":
+ main()
